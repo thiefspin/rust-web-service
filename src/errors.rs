@@ -2,6 +2,7 @@ use actix_web::{HttpResponse, ResponseError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum ServiceError {
     #[error("Authentication failed")]
     Unauthorized,

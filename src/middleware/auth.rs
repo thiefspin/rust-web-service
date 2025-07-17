@@ -51,6 +51,7 @@ where
 
     forward_ready!(service);
 
+    #[allow(unused_mut)]
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let service = Rc::clone(&self.service);
 
@@ -75,7 +76,7 @@ where
                             });
                         }
                         Err(e) => {
-                            log::warn!("JWT verification failed: {:?}", e);
+                            log::warn!("JWT verification failed: {e:?}");
                             return Err(actix_web::error::ErrorUnauthorized(e));
                         }
                     }
@@ -134,6 +135,7 @@ where
 
     forward_ready!(service);
 
+    #[allow(unused_mut)]
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let service = Rc::clone(&self.service);
 

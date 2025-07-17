@@ -30,7 +30,7 @@ async fn main() -> std::io::Result<()> {
 
     // Validate configuration
     if let Err(e) = CONFIG.validate() {
-        log::error!("Configuration validation failed: {}", e);
+        log::error!("Configuration validation failed: {e}");
         std::process::exit(1);
     }
 

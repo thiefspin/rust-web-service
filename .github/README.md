@@ -6,7 +6,7 @@ This directory contains the GitHub Actions workflows and configuration files for
 
 ### 🔧 Main CI Pipeline (`ci.yml`)
 
-The primary CI pipeline runs on every push and pull request to `main` and `develop` branches. It includes:
+The primary CI pipeline runs on every push and pull request to `master` and `develop` branches. It includes:
 
 #### Code Quality Checks
 - **Formatting**: Ensures code follows Rust formatting standards using `rustfmt`
@@ -44,7 +44,7 @@ Comprehensive security scanning that runs on pushes, PRs, and daily at 2 AM UTC:
 
 ### 📊 Benchmark Pipeline (`benchmark.yml`)
 
-Performance monitoring that runs on main branch pushes and weekly:
+Performance monitoring that runs on master branch pushes and weekly:
 
 #### Performance Testing
 - **Micro-benchmarks**: Runs Criterion.rs benchmarks
@@ -108,8 +108,8 @@ LOG_LEVEL=debug
 ## Workflow Triggers
 
 ### Automatic Triggers
-- **Push**: `main`, `develop` branches
-- **Pull Request**: `main`, `develop` branches
+- **Push**: `master`, `develop` branches
+- **Pull Request**: `master`, `develop` branches
 - **Schedule**: 
   - Security scan: Daily at 2 AM UTC
   - Benchmarks: Weekly on Sunday at 3 AM UTC
@@ -125,7 +125,7 @@ Add these badges to your main README.md:
 ```markdown
 [![CI](https://github.com/your-username/rust-web-service/workflows/CI/badge.svg)](https://github.com/your-username/rust-web-service/actions/workflows/ci.yml)
 [![Security](https://github.com/your-username/rust-web-service/workflows/Security/badge.svg)](https://github.com/your-username/rust-web-service/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/your-username/rust-web-service/branch/main/graph/badge.svg)](https://codecov.io/gh/your-username/rust-web-service)
+[![codecov](https://codecov.io/gh/your-username/rust-web-service/branch/master/graph/badge.svg)](https://codecov.io/gh/your-username/rust-web-service)
 ```
 
 ## Troubleshooting

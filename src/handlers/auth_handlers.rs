@@ -133,7 +133,7 @@ pub async fn logout(req: HttpRequest) -> ServiceResult<impl Responder> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::auth_user::MessageResponse;
+    // use crate::models::auth_user::MessageResponse; // Commented out due to unused import
     use actix_web::{test, web, App};
 
     #[actix_web::test]

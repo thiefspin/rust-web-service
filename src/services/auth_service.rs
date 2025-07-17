@@ -439,7 +439,7 @@ impl AuthService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::postgres::PgPoolOptions;
+    // use sqlx::postgres::PgPoolOptions; // Commented out due to unused import
 
     async fn create_test_pool() -> Pool<Postgres> {
         // This would need a test database URL
