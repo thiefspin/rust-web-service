@@ -112,6 +112,7 @@ async fn main() -> std::io::Result<()> {
 mod tests {
     use super::*;
     use actix_web::{test, App};
+    use std::env;
 
     #[actix_web::test]
     async fn test_app_configuration() {
@@ -134,8 +135,8 @@ mod tests {
         assert!(resp.status().is_success());
     }
 
-    #[test]
-    fn test_config_validation() {
+    #[actix_web::test]
+    async fn test_config_validation() {
         // Test that config validation works
         env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
         env::set_var("JWT_SECRET", "test_secret_key_that_is_long_enough_for_jwt");

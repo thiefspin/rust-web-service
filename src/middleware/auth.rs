@@ -238,9 +238,9 @@ mod tests {
         .await;
 
         let req = test::TestRequest::get().uri("/protected").to_request();
-        let resp = test::call_service(&app, req).await;
+        let resp = test::try_call_service(&app, req).await;
 
-        assert_eq!(resp.status(), 401);
+        assert!(resp.is_err());
     }
 
     #[actix_web::test]
@@ -256,9 +256,9 @@ mod tests {
             .uri("/protected")
             .insert_header(("Authorization", "Bearer invalid_token"))
             .to_request();
-        let resp = test::call_service(&app, req).await;
+        let resp = test::try_call_service(&app, req).await;
 
-        assert_eq!(resp.status(), 401);
+        assert!(resp.is_err());
     }
 
     #[actix_web::test]

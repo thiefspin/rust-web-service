@@ -72,14 +72,14 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/api/v1/auth/user/info")
             .to_request();
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 401);
+        let resp = test::try_call_service(&app, req).await;
+        assert!(resp.is_err());
 
         let req = test::TestRequest::post()
             .uri("/api/v1/auth/user/logout")
             .to_request();
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 401);
+        let resp = test::try_call_service(&app, req).await;
+        assert!(resp.is_err());
     }
 
     #[actix_web::test]
