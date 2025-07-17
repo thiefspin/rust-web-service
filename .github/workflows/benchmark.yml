@@ -5,9 +5,9 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
-  schedule:
-    # Run benchmarks weekly on Sunday at 3 AM UTC
-    - cron: "0 3 * * 0"
+  # schedule:
+  #   # Run benchmarks weekly on Sunday at 3 AM UTC
+  #   - cron: "0 3 * * 0"
 
 env:
   CARGO_TERM_COLOR: always
@@ -68,13 +68,13 @@ jobs:
         run: cargo install cargo-criterion
 
       - name: Run benchmarks
-        run: cargo criterion --output-format json > benchmark-results.json
+        run: cargo criterion --output-format criterion > benchmark-results.txt
 
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: "cargo"
-          output-file-path: benchmark-results.json
+          output-file-path: benchmark-results.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: true
@@ -87,7 +87,7 @@ jobs:
         with:
           name: benchmark-results
           path: |
-            benchmark-results.json
+            benchmark-results.txt
             target/criterion/
           retention-days: 30
 
@@ -171,11 +171,11 @@ jobs:
 
           export const options = {
             stages: [
-              { duration: '2m', target: 10 },   // Ramp up
-              { duration: '5m', target: 10 },   // Stay at 10 users
-              { duration: '2m', target: 20 },   // Ramp up to 20 users
-              { duration: '5m', target: 20 },   // Stay at 20 users
-              { duration: '2m', target: 0 },    // Ramp down
+              { duration: '30s', target: 10 },   // Ramp up
+              { duration: '30s', target: 10 },   // Stay at 10 users
+              { duration: '1m', target: 20 },   // Ramp up to 20 users
+              { duration: '1m', target: 20 },   // Stay at 20 users
+              { duration: '30s', target: 0 },    // Ramp down
             ],
             thresholds: {
               http_req_duration: ['p(95)<500'], // 95% of requests should be below 500ms
