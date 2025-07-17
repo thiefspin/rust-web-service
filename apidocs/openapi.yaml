@@ -1,0 +1,555 @@
+openapi: 3.0.3
+info:
+  title: Rust Web Service - Authentication API
+  description: |
+    A production-ready authentication system built with Rust and Actix-web v4, featuring JWT authentication, PostgreSQL integration, and comprehensive security features.
+
+    ## Features
+    - JWT-based authentication
+    - User registration and login
+    - Password security with bcrypt
+    - Account protection and locking
+    - Password reset functionality
+    - Email verification
+    - Input validation
+    - Comprehensive error handling
+
+    ## Security
+    - Strong password policy enforcement
+    - Account locking after 5 failed attempts
+    - JWT token expiration
+    - Secure password reset tokens
+    - Email verification requirement
+
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://127.0.0.1:8080/api/v1
+    description: Development server
+  - url: https://api.yourapp.com/api/v1
+    description: Production server
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health Check
+      description: Check if the API service is running and healthy
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "healthy"
+                timestamp: "2023-12-07T10:30:00.000Z"
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register User
+      description: Register a new user account with email and password
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: "john.doe@example.com"
+              password: "MySecurePass123!"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "User registered successfully. Please check your email for verification."
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "validation_error"
+                message: "email: Invalid email format; password: Password must be at least 8 characters long"
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "user_already_exists"
+                message: "User already exists"
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login User
+      description: Authenticate a user and receive an access token
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "john.doe@example.com"
+              password: "MySecurePass123!"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                access_token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                token_type: "Bearer"
+                expires_in: 3600
+                user:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  email: "john.doe@example.com"
+                  is_verified: false
+                  created_at: "2023-12-07T10:00:00.000Z"
+                  last_login: "2023-12-07T10:30:00.000Z"
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_credentials"
+                message: "Invalid credentials"
+
+  /auth/verify-email:
+    get:
+      tags:
+        - Authentication
+      summary: Verify Email
+      description: Verify a user's email address using a verification token
+      operationId: verifyEmail
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Email verification token
+          schema:
+            type: string
+            example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        '200':
+          description: Email verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Email verified successfully."
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_token"
+                message: "Invalid token"
+
+  /auth/request-password-reset:
+    post:
+      tags:
+        - Authentication
+      summary: Request Password Reset
+      description: Request a password reset link to be sent to the user's email
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+            example:
+              email: "john.doe@example.com"
+      responses:
+        '200':
+          description: Password reset request processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "If the email exists, a password reset link has been sent."
+
+  /auth/confirm-password-reset:
+    post:
+      tags:
+        - Authentication
+      summary: Confirm Password Reset
+      description: Reset a user's password using a reset token
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmResetPasswordRequest'
+            example:
+              token: "b2c3d4e5-f6g7-8901-bcde-f23456789012"
+              new_password: "MyNewSecurePass123!"
+      responses:
+        '200':
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Password reset successfully."
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_token"
+                message: "Invalid token"
+
+  /auth/user/info:
+    get:
+      tags:
+        - User Management
+      summary: Get User Info
+      description: Retrieve information about the currently authenticated user
+      operationId: getUserInfo
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                email: "john.doe@example.com"
+                is_verified: true
+                created_at: "2023-12-07T10:00:00.000Z"
+                last_login: "2023-12-07T10:30:00.000Z"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "unauthorized"
+                message: "Authentication failed"
+
+  /auth/user/change-password:
+    post:
+      tags:
+        - User Management
+      summary: Change Password
+      description: Change the authenticated user's password
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            example:
+              current_password: "MySecurePass123!"
+              new_password: "MyNewSecurePass456!"
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "Password changed successfully."
+        '401':
+          description: Invalid credentials or unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_credentials"
+                message: "Invalid credentials"
+
+  /auth/user/refresh-token:
+    post:
+      tags:
+        - User Management
+      summary: Refresh Token
+      description: Generate a new JWT token for the authenticated user
+      operationId: refreshToken
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                access_token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                token_type: "Bearer"
+                expires_in: 3600
+                user:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  email: "john.doe@example.com"
+                  is_verified: true
+                  created_at: "2023-12-07T10:00:00.000Z"
+                  last_login: "2023-12-07T10:30:00.000Z"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/user/logout:
+    post:
+      tags:
+        - User Management
+      summary: Logout
+      description: Logout the current user (primarily for logging purposes)
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Logged out successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login endpoint
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "user@example.com"
+        password:
+          type: string
+          minLength: 8
+          description: |
+            User's password. Must contain:
+            - At least 8 characters
+            - At least one uppercase letter
+            - At least one lowercase letter
+            - At least one digit
+            - At least one special character (@$!%*?&)
+          example: "SecurePassword123!"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "user@example.com"
+        password:
+          type: string
+          description: User's password
+          example: "SecurePassword123!"
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email address to send password reset link
+          example: "user@example.com"
+
+    ConfirmResetPasswordRequest:
+      type: object
+      required:
+        - token
+        - new_password
+      properties:
+        token:
+          type: string
+          description: Password reset token received via email
+          example: "b2c3d4e5-f6g7-8901-bcde-f23456789012"
+        new_password:
+          type: string
+          minLength: 8
+          description: New password meeting security requirements
+          example: "NewSecurePassword123!"
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+          description: Current password for verification
+          example: "CurrentPassword123!"
+        new_password:
+          type: string
+          minLength: 8
+          description: New password meeting security requirements
+          example: "NewSecurePassword123!"
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+        token_type:
+          type: string
+          description: Token type
+          example: "Bearer"
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+          example: 3600
+        user:
+          $ref: '#/components/schemas/UserInfo'
+
+    UserInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User's unique identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "user@example.com"
+        is_verified:
+          type: boolean
+          description: Whether the user's email is verified
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2023-12-07T10:00:00.000Z"
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last login timestamp
+          example: "2023-12-07T10:30:00.000Z"
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Response message
+          example: "Operation completed successfully"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+          enum:
+            - unauthorized
+            - forbidden
+            - validation_error
+            - user_already_exists
+            - invalid_credentials
+            - token_expired
+            - invalid_token
+            - not_found
+            - database_error
+            - internal_error
+          example: "validation_error"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid input data"
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Service health status
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+          example: "2023-12-07T10:30:00.000Z"
+
+tags:
+  - name: Health
+    description: Service health monitoring
+  - name: Authentication
+    description: User authentication and account management
+  - name: User Management
+    description: User profile and account operations (requires authentication)

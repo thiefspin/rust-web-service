@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: rust-web-service-db
+    environment:
+      POSTGRES_DB: rust_web_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rust-web-service-network
+
+  # Rust Web Service
+  web-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rust-web-service-app
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rust_web_service
+      JWT_SECRET: your_super_secret_jwt_key_that_should_be_at_least_32_characters_long_for_production
+      JWT_EXPIRATION: 3600
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      BCRYPT_COST: 12
+      LOG_LEVEL: info
+      RUST_ENV: production
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rust-web-service-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis (Optional - for future caching/session storage)
+  redis:
+    image: redis:7-alpine
+    container_name: rust-web-service-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rust-web-service-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: rust-web-service-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - web-service
+    networks:
+      - rust-web-service-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  rust-web-service-network:
+    driver: bridge
