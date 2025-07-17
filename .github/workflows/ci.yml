@@ -1,0 +1,309 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Check code formatting
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  # Run Clippy lints
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: clippy
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # Check for security vulnerabilities
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+  # Test on multiple platforms and Rust versions
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta, 1.70.0] # MSRV (Minimum Supported Rust Version)
+        exclude:
+          # Reduce CI load by not testing all combinations
+          - os: windows-latest
+            rust: beta
+          - os: macos-latest
+            rust: beta
+          - os: windows-latest
+            rust: 1.70.0
+          - os: macos-latest
+            rust: 1.70.0
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ matrix.os }}-${{ matrix.rust }}
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Set up test environment variables
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db" >> $GITHUB_ENV
+          echo "JWT_SECRET=test_secret_key_that_is_long_enough_for_jwt_testing_in_ci" >> $GITHUB_ENV
+          echo "JWT_EXPIRATION=3600" >> $GITHUB_ENV
+          echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+          echo "SERVER_PORT=8080" >> $GITHUB_ENV
+          echo "BCRYPT_COST=4" >> $GITHUB_ENV
+          echo "LOG_LEVEL=debug" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          sqlx database create
+          sqlx migrate run
+        if: matrix.os == 'ubuntu-latest'
+
+      - name: Check compilation
+        run: cargo check --all-targets --all-features
+
+      - name: Run tests
+        run: cargo test --verbose
+        if: matrix.os == 'ubuntu-latest' # Only run tests with database on Ubuntu
+
+      - name: Run tests (without database)
+        run: cargo test --verbose -- --skip ignored
+        if: matrix.os != 'ubuntu-latest' # Skip database tests on other platforms
+
+      - name: Run integration tests
+        run: cargo test --verbose -- --ignored
+        if: matrix.os == 'ubuntu-latest' # Only run integration tests with database
+
+  # Build and check that everything compiles in release mode
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: build-release
+
+      - name: Build in release mode
+        run: cargo build --release --all-targets
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-web-service-binary
+          path: target/release/rust-web-service*
+          retention-days: 7
+
+  # Check documentation builds
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: docs
+
+      - name: Build documentation
+        run: cargo doc --no-deps --document-private-items --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # Check for common issues
+  check:
+    name: Additional Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: check
+
+      - name: Check for unused dependencies
+        run: |
+          cargo install cargo-machete
+          cargo machete
+
+      - name: Check for outdated dependencies
+        run: |
+          cargo install cargo-outdated
+          cargo outdated --exit-code 1
+        continue-on-error: true # Don't fail CI for outdated deps, just warn
+
+  # Coverage reporting
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Set up test environment variables
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db" >> $GITHUB_ENV
+          echo "JWT_SECRET=test_secret_key_that_is_long_enough_for_jwt_testing_in_ci" >> $GITHUB_ENV
+          echo "JWT_EXPIRATION=3600" >> $GITHUB_ENV
+          echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+          echo "SERVER_PORT=8080" >> $GITHUB_ENV
+          echo "BCRYPT_COST=4" >> $GITHUB_ENV
+          echo "LOG_LEVEL=debug" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          sqlx database create
+          sqlx migrate run
+
+      - name: Generate test coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false # Don't fail CI if codecov upload fails
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Final status check
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [fmt, clippy, audit, test, build, docs, check, coverage]
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ needs.fmt.result }}" != "success" || \
+                "${{ needs.clippy.result }}" != "success" || \
+                "${{ needs.audit.result }}" != "success" || \
+                "${{ needs.test.result }}" != "success" || \
+                "${{ needs.build.result }}" != "success" || \
+                "${{ needs.docs.result }}" != "success" || \
+                "${{ needs.check.result }}" != "success" || \
+                "${{ needs.coverage.result }}" != "success" ]]; then
+            echo "One or more jobs failed!"
+            exit 1
+          fi
+          echo "All jobs succeeded!"

@@ -1,0 +1,63 @@
+version: 2
+updates:
+  # Enable version updates for Cargo
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: Africa/Johannesburg
+    open-pull-requests-limit: 10
+    assignees:
+      - "maintainer" # Replace with actual GitHub username
+    reviewers:
+      - "maintainer" # Replace with actual GitHub username
+    commit-message:
+      prefix: "cargo"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "rust"
+    ignore:
+      # Ignore major version updates for critical dependencies
+      - dependency-name: "tokio"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "actix-web"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "sqlx"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Group related dependencies together
+      actix-ecosystem:
+        patterns:
+          - "actix-*"
+      tokio-ecosystem:
+        patterns:
+          - "tokio*"
+      serde-ecosystem:
+        patterns:
+          - "serde*"
+      sqlx-ecosystem:
+        patterns:
+          - "sqlx*"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: Africa/Johannesburg
+    open-pull-requests-limit: 5
+    assignees:
+      - "maintainer" # Replace with actual GitHub username
+    reviewers:
+      - "maintainer" # Replace with actual GitHub username
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"

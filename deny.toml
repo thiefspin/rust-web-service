@@ -1,0 +1,184 @@
+# cargo-deny configuration file
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# The graph table configures how the dependency graph is constructed and thus
+# which crates the checks are performed over
+targets = [
+    # The triple can be any string, but only the target triples built in to
+    # rustc (as of 1.40) can be checked against actual config
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-pc-windows-msvc" },
+    { triple = "x86_64-apple-darwin" },
+]
+all-features = false
+no-default-features = false
+
+[output]
+# When outputting inclusion graphs in diagnostics that include features, this
+# option can be used to specify the depth at which feature edges will be added.
+# This option is included since the graphs can be quite large and the addition
+# of features from the crate(s) to all of the graph roots can be far too verbose.
+# This option can be overridden via `--feature-depth` on the cmd line
+feature-depth = 1
+
+[advisories]
+# The advisories section configures how security advisories are handled
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# The lint level for security vulnerabilities
+vulnerability = "deny"
+# The lint level for unmaintained crates
+unmaintained = "warn"
+# The lint level for crates that have been yanked from their source registry
+yanked = "warn"
+# The lint level for crates with security notices. Note that as of
+# 2019-12-17 there are no security notice advisories in
+# https://github.com/rustsec/advisory-db
+notice = "warn"
+# A list of advisory IDs to ignore. Note that ignored advisories will still
+# output a note when they are encountered.
+ignore = [
+    #"RUSTSEC-0000-0000",
+]
+# Threshold for security vulnerabilities, any vulnerability with a CVSS score
+# lower than this value will be ignored. Note that ignored advisories will still
+# output a note when they are encountered.
+# * None (default) - CVSS Score 0.0
+# * Low - CVSS Score 0.1 - 3.9
+# * Medium - CVSS Score 4.0 - 6.9
+# * High - CVSS Score 7.0 - 8.9
+# * Critical - CVSS Score 9.0 - 10.0
+severity-threshold = "low"
+
+[licenses]
+# The confidence threshold for detecting a license from a license text.
+# The higher the value, the more closely the license text must match the
+# canonical license text of a valid SPDX license file.
+# [possible values: any between 0.0 and 1.0].
+confidence-threshold = 0.8
+# List of explicitly allowed licenses
+# See https://spdx.org/licenses/ for list of possible licenses
+# [possible values: any SPDX 3.11 short identifier (+ optional exception)].
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unlicense",
+    "0BSD",
+    "Zlib",
+]
+# List of explicitly disallowed licenses
+# See https://spdx.org/licenses/ for list of possible licenses
+# [possible values: any SPDX 3.11 short identifier (+ optional exception)].
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-1.0",
+    "AGPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "EUPL-1.0",
+    "EUPL-1.1",
+    "EUPL-1.2",
+    "CECILL-2.0",
+    "CECILL-2.1",
+    "CECILL-B",
+    "CECILL-C",
+]
+# Lint level for when multiple versions of the same license are detected
+copyleft = "warn"
+# The confidence threshold for detecting a license from a license text.
+# The higher the value, the more closely the license text must match the
+# canonical license text of a valid SPDX license file.
+# [possible values: any between 0.0 and 1.0].
+default = "deny"
+# The lint level for crates which do not have a detectable license
+unlicensed = "deny"
+# List of allowed licenses for particular crates
+allow-osi-fsf-free = "both"
+# List of allowed licenses for particular crates
+[[licenses.exceptions]]
+# Each member of the 'allow' list must be a valid SPDX expression
+allow = ["OpenSSL"]
+name = "ring"
+
+[bans]
+# Lint level for when multiple versions of the same crate are detected
+multiple-versions = "warn"
+# Lint level for when a crate version requirement is `*`
+wildcards = "allow"
+# The graph highlighting used when creating dotgraphs for crates
+# with multiple versions
+# * all - all edges are highlighted
+# * first-and-last - only the first and last edges are highlighted
+# * none - no edges are highlighted
+highlight = "all"
+# The default lint level for `default` features, if not specified in `features`
+default-features = "allow"
+# The default lint level for `external` features, if not specified in `features`
+external-default-features = "allow"
+# List of crates that are allowed. Use with care!
+allow = [
+    #{ name = "ansi_term", version = "=0.11.0" },
+]
+# List of crates to deny
+deny = [
+    # Each entry the name of a crate and a version range. If version is
+    # not specified, all versions will be matched.
+    #{ name = "ansi_term", version = "=0.11.0" },
+
+    # Deny old OpenSSL versions due to security vulnerabilities
+    { name = "openssl", version = "<1.1" },
+    { name = "openssl-sys", version = "<0.9.60" },
+
+    # Deny known vulnerable crates
+    { name = "tempdir" },                   # Use tempfile instead
+    { name = "time", version = "<0.2.23" }, # CVE-2020-26235
+]
+# Certain crates/versions that will be skipped when doing duplicate detection.
+skip = [
+    #{ name = "ansi_term", version = "=0.11.0" },
+]
+# Similarly to `skip` allows you to skip certain crates from being checked. Unlike
+# `skip`, a skipped crate is removed from the dependency graph entirely and so
+# will not cause alerts even if versions of the skipped crate are found multiple
+# times in the graph.
+skip-tree = [
+    #{ name = "ansi_term", version = "=0.11.0", depth = 20 },
+]
+
+[sources]
+# Lint level for what to happen when a crate from a crate registry that is
+# not in the allow list is encountered
+unknown-registry = "warn"
+# Lint level for what to happen when a crate from a git repository that is not
+# in the allow list is encountered
+unknown-git = "warn"
+# List of allowed registries
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# List of allowed Git repositories
+allow-git = [
+    #"https://github.com/rust-lang/crates.io-index",
+]
+
+[sources.allow-org]
+# 1 or more github.com organizations to allow git sources for
+github = [
+    # "github_org_name",
+]
+# 1 or more gitlab.com organizations to allow git sources for
+gitlab = [
+    # "gitlab_org_name",
+]
+# 1 or more bitbucket.org organizations to allow git sources for
+bitbucket = [
+    # "bitbucket_org_name",
+]

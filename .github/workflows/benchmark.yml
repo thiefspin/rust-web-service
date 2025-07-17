@@ -1,0 +1,326 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run benchmarks weekly on Sunday at 3 AM UTC
+    - cron: '0 3 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: benchmark_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: benchmark
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Set up benchmark environment variables
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/benchmark_db" >> $GITHUB_ENV
+          echo "JWT_SECRET=benchmark_secret_key_that_is_long_enough_for_jwt_testing" >> $GITHUB_ENV
+          echo "JWT_EXPIRATION=3600" >> $GITHUB_ENV
+          echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+          echo "SERVER_PORT=8080" >> $GITHUB_ENV
+          echo "BCRYPT_COST=4" >> $GITHUB_ENV
+          echo "LOG_LEVEL=error" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          sqlx database create
+          sqlx migrate run
+
+      - name: Install cargo-criterion
+        run: cargo install cargo-criterion
+
+      - name: Run benchmarks
+        run: cargo criterion --output-format json > benchmark-results.json
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: benchmark-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '150%'
+          fail-on-alert: false
+          summary-always: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-results.json
+            target/criterion/
+          retention-days: 30
+
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: loadtest_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: loadtest
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Set up environment variables
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/loadtest_db" >> $GITHUB_ENV
+          echo "JWT_SECRET=loadtest_secret_key_that_is_long_enough_for_jwt_testing" >> $GITHUB_ENV
+          echo "JWT_EXPIRATION=3600" >> $GITHUB_ENV
+          echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+          echo "SERVER_PORT=8080" >> $GITHUB_ENV
+          echo "BCRYPT_COST=4" >> $GITHUB_ENV
+          echo "LOG_LEVEL=error" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          sqlx database create
+          sqlx migrate run
+
+      - name: Build application
+        run: cargo build --release
+
+      - name: Start application in background
+        run: |
+          ./target/release/rust-web-service &
+          echo $! > app.pid
+          # Wait for application to start
+          sleep 10
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Create k6 test script
+        run: |
+          cat > loadtest.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          import { Rate } from 'k6/metrics';
+
+          const errorRate = new Rate('errors');
+          const BASE_URL = 'http://127.0.0.1:8080';
+
+          export const options = {
+            stages: [
+              { duration: '2m', target: 10 },   // Ramp up
+              { duration: '5m', target: 10 },   // Stay at 10 users
+              { duration: '2m', target: 20 },   // Ramp up to 20 users
+              { duration: '5m', target: 20 },   // Stay at 20 users
+              { duration: '2m', target: 0 },    // Ramp down
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<500'], // 95% of requests should be below 500ms
+              http_req_failed: ['rate<0.05'],   // Error rate should be below 5%
+            },
+          };
+
+          export default function () {
+            // Test health endpoint
+            let healthResponse = http.get(`${BASE_URL}/api/v1/health`);
+            check(healthResponse, {
+              'health status is 200': (r) => r.status === 200,
+            });
+            errorRate.add(healthResponse.status !== 200);
+
+            // Test auth health endpoint
+            let authHealthResponse = http.get(`${BASE_URL}/api/v1/auth/health`);
+            check(authHealthResponse, {
+              'auth health status is 200': (r) => r.status === 200,
+            });
+            errorRate.add(authHealthResponse.status !== 200);
+
+            sleep(1);
+          }
+          EOF
+
+      - name: Run load test
+        run: k6 run --out json=loadtest-results.json loadtest.js
+
+      - name: Stop application
+        run: |
+          if [ -f app.pid ]; then
+            kill $(cat app.pid) || true
+            rm app.pid
+          fi
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-results
+          path: loadtest-results.json
+          retention-days: 30
+
+      - name: Process load test results
+        run: |
+          echo "## Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "Load test completed. Results uploaded as artifact." >> $GITHUB_STEP_SUMMARY
+
+          # Extract key metrics if k6 JSON output is available
+          if [ -f loadtest-results.json ]; then
+            echo "### Key Metrics" >> $GITHUB_STEP_SUMMARY
+            echo "- Test completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "- Results saved to loadtest-results.json" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  memory-benchmark:
+    name: Memory Usage Benchmark
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: memory_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: memory-benchmark
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Install valgrind and other tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind time
+
+      - name: Set up environment variables
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/memory_test_db" >> $GITHUB_ENV
+          echo "JWT_SECRET=memory_test_secret_key_that_is_long_enough_for_jwt_testing" >> $GITHUB_ENV
+          echo "JWT_EXPIRATION=3600" >> $GITHUB_ENV
+          echo "SERVER_HOST=127.0.0.1" >> $GITHUB_ENV
+          echo "SERVER_PORT=8080" >> $GITHUB_ENV
+          echo "BCRYPT_COST=4" >> $GITHUB_ENV
+          echo "LOG_LEVEL=error" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          sqlx database create
+          sqlx migrate run
+
+      - name: Build application with debug info
+        run: cargo build --release
+
+      - name: Run memory usage test
+        run: |
+          # Run the application for a short time and measure memory usage
+          timeout 30s /usr/bin/time -v ./target/release/rust-web-service > memory-output.txt 2>&1 || true
+
+          # Extract memory usage information
+          echo "## Memory Usage Report" >> $GITHUB_STEP_SUMMARY
+          if grep -q "Maximum resident set size" memory-output.txt; then
+            MEMORY_KB=$(grep "Maximum resident set size" memory-output.txt | awk '{print $6}')
+            MEMORY_MB=$((MEMORY_KB / 1024))
+            echo "- Maximum memory usage: ${MEMORY_MB} MB (${MEMORY_KB} KB)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload memory test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-test-results
+          path: memory-output.txt
+          retention-days: 30
+
+  benchmark-summary:
+    name: Benchmark Summary
+    runs-on: ubuntu-latest
+    needs: [benchmark, load-test, memory-benchmark]
+    if: always()
+    steps:
+      - name: Benchmark Summary
+        run: |
+          echo "## Benchmark Suite Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance Benchmarks | ${{ needs.benchmark.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Load Testing | ${{ needs.load-test.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Memory Benchmarks | ${{ needs.memory-benchmark.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Benchmark artifacts are available for download for 30 days." >> $GITHUB_STEP_SUMMARY
