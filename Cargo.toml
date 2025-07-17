@@ -23,7 +23,7 @@ jsonwebtoken = "9.2"
 thiserror = "1.0"
 anyhow = "1.0"
 dotenv = "0.15"
-validator = { version = "0.16", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 actix-web-validator = "5.0"
 env_logger = "0.10"
 log = "0.4"
