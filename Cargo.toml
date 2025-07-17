@@ -20,7 +20,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 bcrypt = "0.17"
 jsonwebtoken = "9.2"
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 dotenv = "0.15"
 validator = { version = "0.16", features = ["derive"] }
