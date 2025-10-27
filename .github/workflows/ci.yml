@@ -167,7 +167,7 @@ jobs:
         run: cargo build --release --all-targets
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rust-web-service-binary
           path: target/release/rust-web-service*
